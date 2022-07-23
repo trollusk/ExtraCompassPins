@@ -1,0 +1,10 @@
+## APIVersion: 101034
+## Version: 1.0.0
+## Title: Extra Compass Pins
+## Author: @trollusk
+## Description: Adds pins to the compass for group members, services, etc.
+## SavedVariables: ExtraCompassPins_SV
+
+## DependsOn: CustomCompassPins LibAddonMenu-2.0>=30
+
+ExtraCompassPins.lua
