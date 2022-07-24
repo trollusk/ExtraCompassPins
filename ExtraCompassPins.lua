@@ -5,6 +5,7 @@
 -- First, we create a namespace for our addon by declaring a top-level table that will hold everything else.
 ExtraCompassPins = {}
 local XCP = ExtraCompassPins
+local LMP = LibMapPins
 
 -- This isn't strictly necessary, but we'll use this string later when registering events.
 -- Better to define it in a single place rather than retyping the same string.
@@ -17,40 +18,91 @@ XCP.defaultSettings = {
     showGroupMembers = true
 }
 
+
+local COLOR_WHITE = ZO_ColorDef:New("#ffffff")
+local COLOR_MINT_GREEN = ZO_ColorDef:New("c8ffd2")
+local COLOR_GOLD = ZO_ColorDef:New("#ffcc66")
+local COLOR_TAN = ZO_ColorDef:New("#f9d286")
+local COLOR_LAVENDER = ZO_ColorDef:New("#f9e6ff")
+
+
 -- Next we create a function that will initialize our addon
 function XCP.Initialize()
-  XCP.settings = ZO_SavedVars:NewAccountWide("ExtraCompassPins_SV", 1, nil, XCP.defaultSettings)
-  XCP.SetupSettings()
+    XCP.settings = ZO_SavedVars:NewAccountWide("ExtraCompassPins_SV", 1, nil, XCP.defaultSettings)
+    XCP.SetupSettings()
 
-  -- ...but we don't have anything to initialize yet. We'll come back to this.
-  COMPASS_PINS:AddCustomPin("XCP.stable", function() XCP.pinCallback() end, 
-    { maxDistance = 0.1, 
-      texture = "esoui/art/icons/servicemappins/servicepin_stable.dds" })
-  COMPASS_PINS:AddCustomPin("XCP.bank", function() XCP.pinCallback() end, 
-    { maxDistance = 0.1, 
-      texture = "esoui/art/icons/servicemappins/servicepin_bank.dds" })
-  COMPASS_PINS:AddCustomPin("XCP.refuge", function() XCP.pinCallback() end, 
-    { maxDistance = 0.1, 
-      texture = "esoui/art/icons/servicemappins/servicepin_fence.dds" })
-  COMPASS_PINS:AddCustomPin("groupmember", function() XCP.pinCallback() end, 
-    { maxDistance = 1.0, 
-      texture = "esoui/art/mappins/UI-WorldMapGroupPip.dds" })
-  COMPASS_PINS:AddCustomPin("groupleader", function() XCP.pinCallback() end, 
-    { maxDistance = 1.0, texture = "esoui/art/compass/groupleader.dds",
-      sizeCallback = function(pin, angle, normAngle, normDistance) end,
+    AddColouredPin("XCP.stable", 0.1, "esoui/art/icons/servicemappins/servicepin_stable.dds", XCP.servicePinCallback, COLOR_TAN)
+    AddColouredPin("XCP.bank", 0.1, "esoui/art/icons/servicemappins/servicepin_bank.dds", XCP.servicePinCallback, COLOR_GOLD)
+    AddColouredPin("XCP.refuge", 0.1, "esoui/art/icons/servicemappins/servicepin_fence.dds", XCP.servicePinCallback)
+    AddColouredPin("groupmember", 1.0, "esoui/art/compass/groupleader.dds", XCP.groupPinCallback, COLOR_LAVENDER)
+    AddColouredPin("groupleader", 1.0, "esoui/art/compass/groupleader.dds", XCP.groupPinCallback, COLOR_GOLD)
+    COMPASS_PINS:RefreshPins()
+
+--   COMPASS_PINS:AddCustomPin("XCP.stable", function() XCP.pinCallback() end, 
+--     { maxDistance = 0.1, 
+--       texture = "esoui/art/icons/servicemappins/servicepin_stable.dds" })
+--   COMPASS_PINS:AddCustomPin("XCP.bank", function() XCP.pinCallback() end, 
+--     { maxDistance = 0.1, 
+--       texture = "esoui/art/icons/servicemappins/servicepin_bank.dds" })
+--   COMPASS_PINS:AddCustomPin("XCP.refuge", function() XCP.pinCallback() end, 
+--     { maxDistance = 0.1, 
+--       texture = "esoui/art/icons/servicemappins/servicepin_fence.dds" })
+--   COMPASS_PINS:AddCustomPin("groupmember", function() XCP.pinCallback() end, 
+--     { maxDistance = 1.0, 
+--       texture = "esoui/art/mappins/UI-WorldMapGroupPip.dds" })
+    --   COMPASS_PINS:AddCustomPin("groupleader", function() XCP.pinCallback() end, 
+--     { maxDistance = 1.0, texture = "esoui/art/compass/groupleader.dds",
+--       sizeCallback = function(pin, angle, normAngle, normDistance) end,
+--       additionalLayout = {
+--             -- "decorator" function, called on each pin after it's created
+--             function (pin, angle, normAngle, normDistance)
+--                 -- r,g,b,a
+--                 if pin then pin:SetColor(MINT_GREEN:UnpackRGBA()) end
+--             end,
+--             -- cleanup function, must undo any special decoration such as colours
+--             function (pin)
+--                 -- reset colour to white
+--                 if pin then pin:SetColor(1,1,1,1) end
+--             end
+--       }})
+end
+
+
+function AddColouredPin(pintype, maxDist, texture, callback, colour)
+  COMPASS_PINS:AddCustomPin(pintype, callback, 
+    { 
+      maxDistance = maxDist, 
+      texture = texture,
+      sizeCallback = function(pin, angle, normAngle, normDistance) 
+            local BASE_ICON_SIZE = 48
+            if normDistance < 0.05 then
+                -- baseline icon size is 32x32
+                -- increase size when close to icon, up to double (64x64)
+                -- df("Size callback: pin.getnamedchild %s, SetDimension %s",
+                --  dump(pin:GetNamedChild("Background")), dump(pin:GetNamedChild("Background").SetDimensions))
+                dim = math.floor(BASE_ICON_SIZE + (BASE_ICON_SIZE * (0.05 - normDistance)/0.05)) .. "px"
+            else
+                dim = BASE_ICON_SIZE .. "px"
+            end
+            --df("Sizecallback normDistance=%f, dim=%s", normDistance, dim)
+            pin:GetNamedChild("Background"):SetDimensions(dim, dim)
+        end,
       additionalLayout = {
             -- "decorator" function, called on each pin after it's created
             function (pin, angle, normAngle, normDistance)
                 -- r,g,b,a
-                --pin:SetColor(0,1,1,1)
+                if pin and colour then 
+                    pin:GetNamedChild("Background"):SetColor(COLOR_GOLD:UnpackRGBA(), 1) 
+                end
             end,
             -- cleanup function, must undo any special decoration such as colours
             function (pin)
-                --pin:SetColor(1,1,1,1)
+                -- reset colour to white
+                if pin and colour then 
+                    pin:GetNamedChild("Background"):SetColor(1,1,1, 1) 
+                end
             end
-      }
-    })
-    COMPASS_PINS:RefreshPins()
+      }})
 end
 
 
@@ -130,7 +182,7 @@ end
 
 -- called whenever the compass is refreshed
 -- must recreate all pins
-function XCP.pinCallback()
+function XCP.groupPinCallback()
     -- pintype matches the string given to AddCustomPin
     -- pin.x and pin.y are normalised map coordinates (0,0 = top left, 1,1 = bottom right)
     -- pintag is a way to pass around extra info about the pins, if you need to
@@ -150,7 +202,10 @@ function XCP.pinCallback()
             end
         end
     end
+end
 
+
+function XCP.servicePinCallback()
     for n=1, GetNumMapLocations() do
         if IsMapLocationVisible(n) then
             -- locName = GetMapLocation(n)
@@ -197,6 +252,18 @@ function split(str, delimiter)
     return result
 end
 
+function dump(o)
+   if type(o) == 'table' then
+      local s = '{ '
+      for k,v in pairs(o) do
+         if type(k) ~= 'number' then k = '"'..k..'"' end
+         s = s .. '['..k..'] = ' .. dump(v) .. ','
+      end
+      return s .. '} '
+   else
+      return tostring(o)
+   end
+end
 
 -- ====================== Events ==============================
 
