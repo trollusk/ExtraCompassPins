@@ -5,7 +5,7 @@
 -- First, we create a namespace for our addon by declaring a top-level table that will hold everything else.
 ExtraCompassPins = {}
 local XCP = ExtraCompassPins
-local LMP = LibMapPins
+--local LMP = LibMapPins
 
 -- This isn't strictly necessary, but we'll use this string later when registering events.
 -- Better to define it in a single place rather than retyping the same string.
@@ -31,11 +31,11 @@ function XCP.Initialize()
     XCP.settings = ZO_SavedVars:NewAccountWide("ExtraCompassPins_SV", 1, nil, XCP.defaultSettings)
     XCP.SetupSettings()
 
-    AddColouredPin("XCP.stable", 0.1, "esoui/art/icons/servicemappins/servicepin_stable.dds", XCP.servicePinCallback, COLOR_TAN)
-    AddColouredPin("XCP.bank", 0.1, "esoui/art/icons/servicemappins/servicepin_bank.dds", XCP.servicePinCallback, COLOR_GOLD)
+    AddColouredPin("XCP.stable", 0.1, "esoui/art/icons/servicemappins/servicepin_stable.dds", XCP.servicePinCallback, 0xf9, 0xd2, 0x86)
+    AddColouredPin("XCP.bank", 0.1, "esoui/art/icons/servicemappins/servicepin_bank.dds", XCP.servicePinCallback, 0xff, 0xcc, 0x66)
     AddColouredPin("XCP.refuge", 0.1, "esoui/art/icons/servicemappins/servicepin_fence.dds", XCP.servicePinCallback)
-    AddColouredPin("groupmember", 1.0, "esoui/art/compass/groupleader.dds", XCP.groupPinCallback, COLOR_LAVENDER)
-    AddColouredPin("groupleader", 1.0, "esoui/art/compass/groupleader.dds", XCP.groupPinCallback, COLOR_GOLD)
+    AddColouredPin("groupmember", 1.0, "esoui/art/compass/groupmember.dds", XCP.groupPinCallback, 0xf9, 0xe6, 0xff)
+    AddColouredPin("groupleader", 1.0, "esoui/art/compass/groupleader.dds", XCP.groupPinCallback, 0xff, 0xcc, 0x66)
     COMPASS_PINS:RefreshPins()
 
 --   COMPASS_PINS:AddCustomPin("XCP.stable", function() XCP.pinCallback() end, 
@@ -68,37 +68,41 @@ function XCP.Initialize()
 end
 
 
-function AddColouredPin(pintype, maxDist, texture, callback, colour)
+function AddColouredPin(pintype, maxDist, texture, callback, red, green, blue)
+    if red and red>1 then red = red/255.0 end
+    if green and green>1 then green = green/255.0 end
+    if blue and blue>1 then blue = blue/255.0 end
+
   COMPASS_PINS:AddCustomPin(pintype, callback, 
     { 
       maxDistance = maxDist, 
       texture = texture,
-      sizeCallback = function(pin, angle, normAngle, normDistance) 
-            local BASE_ICON_SIZE = 48
-            if normDistance < 0.05 then
-                -- baseline icon size is 32x32
-                -- increase size when close to icon, up to double (64x64)
-                -- df("Size callback: pin.getnamedchild %s, SetDimension %s",
-                --  dump(pin:GetNamedChild("Background")), dump(pin:GetNamedChild("Background").SetDimensions))
-                dim = math.floor(BASE_ICON_SIZE + (BASE_ICON_SIZE * (0.05 - normDistance)/0.05)) .. "px"
-            else
-                dim = BASE_ICON_SIZE .. "px"
-            end
-            --df("Sizecallback normDistance=%f, dim=%s", normDistance, dim)
-            pin:GetNamedChild("Background"):SetDimensions(dim, dim)
-        end,
+    --   sizeCallback = function(pin, angle, normAngle, normDistance) 
+    --         local BASE_ICON_SIZE = 48
+    --         if normDistance < 0.05 then
+    --             -- baseline icon size is 32x32
+    --             -- increase size when close to icon, up to double (64x64)
+    --             -- df("Size callback: pin.getnamedchild %s, SetDimension %s",
+    --             --  dump(pin:GetNamedChild("Background")), dump(pin:GetNamedChild("Background").SetDimensions))
+    --             dim = math.floor(BASE_ICON_SIZE + (BASE_ICON_SIZE * (0.05 - normDistance)/0.05))
+    --         else
+    --             dim = BASE_ICON_SIZE
+    --         end
+    --         --df("Sizecallback normDistance=%f, dim=%s", normDistance, dim)
+    --         pin:GetNamedChild("Background"):SetDimensions(dim, dim)
+    --     end,
       additionalLayout = {
             -- "decorator" function, called on each pin after it's created
             function (pin, angle, normAngle, normDistance)
                 -- r,g,b,a
-                if pin and colour then 
-                    pin:GetNamedChild("Background"):SetColor(COLOR_GOLD:UnpackRGBA(), 1) 
+                if pin and red then 
+                    pin:GetNamedChild("Background"):SetColor(red, green, blue, 1) 
                 end
             end,
             -- cleanup function, must undo any special decoration such as colours
             function (pin)
                 -- reset colour to white
-                if pin and colour then 
+                if pin and red then 
                     pin:GetNamedChild("Background"):SetColor(1,1,1, 1) 
                 end
             end
@@ -190,7 +194,7 @@ function XCP.groupPinCallback()
         -- player is grouped
         for n=1, GetGroupSize() do
             tag = GetGroupUnitTagByIndex(n)
-            if IsUnitOnline(tag) and IsGroupMemberInSameWorldAsPlayer(tag) 
+            if (not IsUnitPlayer(tag)) and IsUnitOnline(tag) and IsGroupMemberInSameWorldAsPlayer(tag) 
               and IsGroupMemberInSameInstanceAsPlayer(tag) and IsGroupMemberInSameLayerAsPlayer(tag) then
                 x,y,_,inCurrentMap = GetMapPlayerPosition(tag)        -- to groupN where N=GROUP_SIZE_MAX
                 if inCurrentMap then
@@ -236,7 +240,8 @@ end
 
 function RefreshVolatilePins()
     if GetGroupSize() > 0 then
-        COMPASS_PINS:RefreshPins()
+        COMPASS_PINS:RefreshPins("groupmember")
+        -- this also refreshes leader as they share the same callback function
     end
 end
 

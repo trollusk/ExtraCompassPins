@@ -5,6 +5,6 @@
 ## Description: Adds pins to the compass for group members, services, etc.
 ## SavedVariables: ExtraCompassPins_SV
 
-## DependsOn: CustomCompassPins LibMapPins-1.0 LibAddonMenu-2.0>=30
+## DependsOn: CustomCompassPins LibAddonMenu-2.0>=30
 
 ExtraCompassPins.lua
