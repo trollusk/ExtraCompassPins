@@ -4,16 +4,9 @@
 
 -- First, we create a namespace for our addon by declaring a top-level table that will hold everything else.
 ExtraCompassPins = {}
-local XCP = ExtraCompassPins
+XCP = ExtraCompassPins
 --local LMP = LibMapPins
 
-local COLOR_WHITE = ZO_ColorDef:New("#ffffff")
-local COLOR_MINT_GREEN = ZO_ColorDef:New("c8ffd2")
-local COLOR_GOLD = ZO_ColorDef:New("#ffcc66")
-local COLOR_TAN = ZO_ColorDef:New("#f9d286")
-local COLOR_LAVENDER = ZO_ColorDef:New("#f9e6ff")
-local COLOR_LIGHT_GREY = ZO_ColorDef:New("#eeeeee")
-local COLOR_LIGHT_BLUE = ZO_ColorDef:New("#1010ee")
 
 -- This isn't strictly necessary, but we'll use this string later when registering events.
 -- Better to define it in a single place rather than retyping the same string.
@@ -24,82 +17,78 @@ XCP.defaultSettings = {
     showBanks = true,
     showRefuges = true,
     showGroupMembers = true,
+    showGroupLeader = true,
     showCardinalPoints = true,
     pinRefreshms = 500,
-    colourStable = COLOR_TAN,
-    colourBank = COLOR_GOLD,
-    colourRefuge = COLOR_LIGHT_GREY,
-    colourGroupMember = COLOR_LAVENDER,
-    colourGroupLeader = COLOR_GOLD,
-    colourCardinalPoint = COLOR_LIGHT_BLUE
+    colourBank = {r=0xff, g=0xcc, b=0x66},
+    colourStable = {r=0xf9, g=0xd2, b=0x86},
+    colourRefuge = {r=0xee, g=0xee, b=0xee},
+    colourGroupMember = {r=0xf9, g=0xe6, b=0xff},
+    colourGroupLeader = {r=0xff, g=0xcc, b=0x66},
+    colourCardinalPoint = {r=0x80, g=0xbf, b=0xff}
 }
 
+-- X is E-W coordinate, Z is N-S, and Y is up-down.
+-- Northwest is (x=0,z=0)
+local lastPlayerX = 0
+local lastPlayerZ = 0
 
 -- Next we create a function that will initialize our addon
 function XCP.Initialize()
+
     XCP.settings = ZO_SavedVars:NewAccountWide("ExtraCompassPins_SV", 1, nil, XCP.defaultSettings)
     XCP.SetupSettings()
+    -- call a function every X milliseconds. String is a unique identifier.
+    -- we only need to do this if the pins denote things that are changing their position,
+    -- such as players or NPCs. Otherwise the pins will not refresh/move until the player
+    -- travels to a new map.
+    EVENT_MANAGER:UnregisterForUpdate("ExtraCompassPins_Refresh")
+    EVENT_MANAGER:RegisterForUpdate("ExtraCompassPins_Refresh", XCP.settings.pinRefreshms or 500, RefreshVolatilePins)
+    -- disable with EVENT_MANAGER:UnregisterForUpdate("ExtraCompassPins_Refresh")
 
     AddColouredPin("XCP.stable", 0.1, "esoui/art/icons/servicemappins/servicepin_stable.dds", 
-                XCP.servicePinCallback, XCP.settings.colourStable)
+                XCP.servicePinCallback)
     AddColouredPin("XCP.bank", 0.1, "esoui/art/icons/servicemappins/servicepin_bank.dds", 
-                XCP.servicePinCallback, XCP.settings.colourBank)
+                XCP.servicePinCallback)
     AddColouredPin("XCP.refuge", 0.1, "esoui/art/icons/servicemappins/servicepin_fence.dds", 
-                XCP.servicePinCallback, XCP.settings.colourRefuge)
+                XCP.servicePinCallback)
     AddColouredPin("groupmember", 1.0, "esoui/art/compass/groupmember.dds", 
-                XCP.groupPinCallback, XCP.settings.colourGroupMember)
+                XCP.groupPinCallback)
     AddColouredPin("groupleader", 1.0, "esoui/art/compass/groupleader.dds", 
-                XCP.groupPinCallback, XCP.settings.colourGroupLeader)
+                XCP.groupPinCallback)
     AddColouredPin("XCP.north", 1.0, "ExtraCompassPins/textures/north.dds", 
-                XCP.servicePinCallback, XCP.settings.colourCardinalPoint)
+                XCP.cardinalPointCallback)
     AddColouredPin("XCP.south", 1.0, "ExtraCompassPins/textures/south.dds", 
-                XCP.servicePinCallback, XCP.settings.colourCardinalPoint)
+                XCP.cardinalPointCallback)
     AddColouredPin("XCP.east", 1.0, "ExtraCompassPins/textures/east.dds", 
-                XCP.servicePinCallback, XCP.settings.colourCardinalPoint)
+                XCP.cardinalPointCallback)
     AddColouredPin("XCP.west", 1.0, "ExtraCompassPins/textures/west.dds", 
-                XCP.servicePinCallback, XCP.settings.colourCardinalPoint)
+                XCP.cardinalPointCallback)
 
     COMPASS_PINS:RefreshPins()
 end
 
 
-function AddColouredPin(pintype, maxDist, texture, callback, pinColour)
-    if pinColour then
-        red, green, blue = pinColour:UnpackRGBA()
-        if red and red>1 then red = red/255.0 end
-        if green and green>1 then green = green/255.0 end
-        if blue and blue>1 then blue = blue/255.0 end
-    else
-        red, green, blue = 1, 1, 1
-    end
-
+function AddColouredPin(pintype, maxDist, texture, callback)
     COMPASS_PINS:AddCustomPin(pintype, callback, 
     { 
       maxDistance = maxDist, 
       texture = texture,
-    --   sizeCallback = function(pin, angle, normAngle, normDistance) 
-    --         local BASE_ICON_SIZE = 48
-    --         if normDistance < 0.05 then
-    --             -- baseline icon size is 32x32
-    --             -- increase size when close to icon, up to double (64x64)
-    --             -- df("Size callback: pin.getnamedchild %s, SetDimension %s",
-    --             --  dump(pin:GetNamedChild("Background")), dump(pin:GetNamedChild("Background").SetDimensions))
-    --             dim = math.floor(BASE_ICON_SIZE + (BASE_ICON_SIZE * (0.05 - normDistance)/0.05))
-    --         else
-    --             dim = BASE_ICON_SIZE
-    --         end
-    --         --df("Sizecallback normDistance=%f, dim=%s", normDistance, dim)
-    --         pin:GetNamedChild("Background"):SetDimensions(dim, dim)
-    --     end,
       additionalLayout = {
             -- "decorator" function, called on each pin after it's created
             function (pin, angle, normAngle, normDistance)
                 -- r,g,b,a
-                if pin and red then 
+                if pin and pin.pinTag then 
+                    red = pin.pinTag.r
+                    green = pin.pinTag.g
+                    blue = pin.pinTag.b
+                    if red>1 then red = red/255.0 end
+                    if green>1 then green = green/255.0 end
+                    if blue>1 then blue = blue/255.0 end
                     pin:GetNamedChild("Background"):SetColor(red, green, blue, 1)
-                    if pintype in {"XCP.north", "XCP.south", "XCP.east", "XCP.west"} then
-                        pin:GetNamedChild("Background"):SetDrawTier("HIGH")
-                        -- SetDrawLayer("OVERLAY")
+                    if pintype=="XCP.north" or pintype=="XCP.south" or pintype=="XCP.east" or pintype=="XCP.west" then
+                        pin:GetNamedChild("Background"):SetDrawTier(DT_HIGH)
+                        pin:GetNamedChild("Background"):SetDrawLayer(DL_OVERLAY)
                     end
                 end
             end,
@@ -131,6 +120,7 @@ function XCP.SetupSettings()
 	LAM2:RegisterAddonPanel(XCP.name, panelData)
 
 	local optionsTable = {
+        ---------------------------- group members ----------------------------------
 		[1] = {
 			type = "checkbox",
 			name = "Group members",
@@ -151,21 +141,57 @@ function XCP.SetupSettings()
             tooltip = "Colour of group member compass pins.",
             width = "half",
 			getFunc = function()
-				return XCP.settings.colourGroupMember:UnpackRGBA()
+				c = XCP.settings.colourGroupMember
+                return c.r, c.g, c.b
 			end,
 			setFunc = function(red, green, blue, alpha)
-				XCP.settings.colourGroupMember = ZO_ColorDef:New(red, green, blue, alpha)
+				XCP.settings.colourGroupMember = {r=red, g=green, b=blue}
                 AddColouredPin("groupmember", 1.0, "esoui/art/compass/groupmember.dds", 
-                        XCP.groupPinCallback, XCP.settings.colourGroupMember)
+                        XCP.groupPinCallback)
                 COMPASS_PINS:RefreshPins("groupmember")
 			end,
-			default = XCP.defaultSettings.colourGroupMember
+			default = XCP.defaultSettings.colourGroupMember.r, XCP.defaultSettings.colourGroupMember.g, 
+                      XCP.defaultSettings.colourGroupMember.b
         },
+        ---------------------------- group leader ----------------------------------
 		[3] = {
+			type = "checkbox",
+			name = "Group leader",
+			tooltip = "Show group leader on the compass.",
+            width = "half",
+			getFunc = function()
+				return XCP.settings.showGroupLeader
+			end,
+			setFunc = function(value)
+				XCP.settings.showGroupLeader = value
+                COMPASS_PINS:RefreshPins()
+			end,
+			default = XCP.defaultSettings.showGroupLeader
+		},
+        [4] = {
+            type = "colorpicker",
+            name = "Group Leader icon",
+            tooltip = "Colour of group leader compass pin.",
+            width = "half",
+			getFunc = function()
+				c = XCP.settings.colourGroupLeader
+                return c.r, c.g, c.b
+			end,
+			setFunc = function(red, green, blue, alpha)
+				XCP.settings.colourGroupLeader = {r=red, g=green, b=blue}
+                AddColouredPin("groupleader", 1.0, "esoui/art/compass/groupleader.dds", 
+                        XCP.groupPinCallback)
+                COMPASS_PINS:RefreshPins("groupleader")
+			end,
+			default = XCP.defaultSettings.colourGroupLeader.r, XCP.defaultSettings.colourGroupLeader.g, 
+                      XCP.defaultSettings.colourGroupLeader.b
+        },
+        ---------------------------- stable ----------------------------------
+		[5] = {
 			type = "checkbox",
 			name = "Stables",
 			tooltip = "Show stables on the compass.",
-            -- width = "half",
+            width = "half",
 			getFunc = function()
 				return XCP.settings.showStables
 			end,
@@ -175,11 +201,30 @@ function XCP.SetupSettings()
 			end,
 			default = XCP.defaultSettings.showStables
 		},
-		[4] = {
+        [6] = {
+            type = "colorpicker",
+            name = "Stable icon",
+            tooltip = "Colour of stable compass pin.",
+            width = "half",
+			getFunc = function()
+				c = XCP.settings.colourStable
+                return c.r, c.g, c.b
+			end,
+			setFunc = function(red, green, blue, alpha)
+				XCP.settings.colourStable = {r=red, g=green, b=blue}
+                AddColouredPin("XCP.stable", 0.1, "esoui/art/icons/servicemappins/servicepin_stable.dds", 
+                        XCP.servicePinCallback)
+                COMPASS_PINS:RefreshPins("XCP.stable")
+			end,
+			default = XCP.defaultSettings.colourGroupLeader.r, XCP.defaultSettings.colourGroupLeader.g, 
+                      XCP.defaultSettings.colourGroupLeader.b
+        },
+        ---------------------------- bank ----------------------------------
+		[7] = {
 			type = "checkbox",
 			name = "Banks",
 			tooltip = "Show banks on the compass.",
-            -- width = "half",
+            width = "half",
 			getFunc = function()
 				return XCP.settings.showBanks
 			end,
@@ -189,11 +234,30 @@ function XCP.SetupSettings()
 			end,
 			default = XCP.defaultSettings.showBanks
 		},
-		[5] = {
+        [8] = {
+            type = "colorpicker",
+            name = "Bank icon",
+            tooltip = "Colour of bank compass pin.",
+            width = "half",
+			getFunc = function()
+				c = XCP.settings.colourBank
+                return c.r, c.g, c.b
+			end,
+			setFunc = function(red, green, blue, alpha)
+				XCP.settings.colourBank = {r=red, g=green, b=blue}
+                AddColouredPin("XCP.bank", 0.1, "esoui/art/icons/servicemappins/servicepin_bank.dds", 
+                        XCP.servicePinCallback)
+                COMPASS_PINS:RefreshPins("XCP.bank")
+			end,
+			default = XCP.defaultSettings.colourBank.r, XCP.defaultSettings.colourBank.g, 
+                      XCP.defaultSettings.colourBank.b
+        },
+        ---------------------------- refuge ----------------------------------
+		[9] = {
 			type = "checkbox",
 			name = "Outlaw Refuges",
 			tooltip = "Show outlaw refuges on the compass.",
-            -- width = "half",
+            width = "half",
 			getFunc = function()
 				return XCP.settings.showRefuges
 			end,
@@ -203,7 +267,60 @@ function XCP.SetupSettings()
 			end,
 			default = XCP.defaultSettings.showRefuges
 		},
-		[6] = {
+        [10] = {
+            type = "colorpicker",
+            name = "Outlaw Refuge icon",
+            tooltip = "Colour of outlaw refuge compass pin.",
+            width = "half",
+			getFunc = function()
+				c = XCP.settings.colourRefuge
+                return c.r, c.g, c.b
+			end,
+			setFunc = function(red, green, blue, alpha)
+				XCP.settings.colourRefuge = {r=red, g=green, b=blue}
+                AddColouredPin("XCP.refuge", 0.1, "esoui/art/icons/servicemappins/servicepin_fence.dds", 
+                        XCP.servicePinCallback)
+                COMPASS_PINS:RefreshPins("XCP.refuge")
+			end,
+			default = XCP.defaultSettings.colourRefuge.r, XCP.defaultSettings.colourRefuge.g, 
+                      XCP.defaultSettings.colourRefuge.b
+        },
+        ---------------------------- refuge ----------------------------------
+		[11] = {
+			type = "checkbox",
+			name = "Cardinal points",
+			tooltip = "Show cardinal points (N/S/W/E) on the compass.",
+            width = "half",
+			getFunc = function()
+				return XCP.settings.showCardinalPoints
+			end,
+			setFunc = function(value)
+				XCP.settings.showCardinalPoints = value
+                COMPASS_PINS:RefreshPins()
+			end,
+			default = XCP.defaultSettings.showCardinalPoints
+		},
+        [12] = {
+            type = "colorpicker",
+            name = "Cardinal point icon",
+            tooltip = "Colour of compass pins for the cardinal points (N/S/W/E).",
+            width = "half",
+			getFunc = function()
+				c = XCP.settings.colourCardinalPoint
+                return c.r, c.g, c.b
+			end,
+			setFunc = function(red, green, blue, alpha)
+				XCP.settings.colourCardinalPoint = {r=red, g=green, b=blue}
+                AddColouredPin("XCP.north", 0.1, "ExtraCompassPins/textures/north.dds", XCP.cardinalPointCallback)
+                AddColouredPin("XCP.south", 0.1, "ExtraCompassPins/textures/south.dds", XCP.cardinalPointCallback)
+                AddColouredPin("XCP.east", 0.1, "ExtraCompassPins/textures/east.dds", XCP.cardinalPointCallback)
+                AddColouredPin("XCP.west", 0.1, "ExtraCompassPins/textures/west.dds", XCP.cardinalPointCallback)
+                COMPASS_PINS:RefreshPins("XCP.north")
+			end,
+			default = XCP.defaultSettings.colourCardinalPoint.r, XCP.defaultSettings.colourCardinalPoint.g, 
+                      XCP.defaultSettings.colourCardinalPoint.b
+        },
+		[13] = {
 			type = "slider",
 			name = "Group Pin Refresh Interval (ms)",
 			tooltip = "How often to refresh the group member pins, in milliseconds.",
@@ -237,60 +354,80 @@ function XCP.groupPinCallback()
             tag = GetGroupUnitTagByIndex(n)
             if (not IsUnitPlayer(tag)) and IsUnitOnline(tag) and IsGroupMemberInSameWorldAsPlayer(tag) 
               and IsGroupMemberInSameInstanceAsPlayer(tag) and IsGroupMemberInSameLayerAsPlayer(tag) then
-                x,y,_,inCurrentMap = GetMapPlayerPosition(tag)        -- to groupN where N=GROUP_SIZE_MAX
+                x,z,_,inCurrentMap = GetMapPlayerPosition(tag)        -- to groupN where N=GROUP_SIZE_MAX
                 if inCurrentMap then
                     pintype = "groupmember"
-                    if IsUnitGroupLeader(tag) then pintype = "groupleader" end
-                    COMPASS_PINS.pinManager:CreatePin( pintype, {}, x, y, GetUnitDisplayName(tag))
-                    df("Created %s icon for unit '%s'", pintype, tag)
+                    pinColour = XCP.settings.colourGroupMember
+                    if IsUnitGroupLeader(tag) then 
+                        pintype = "groupleader" 
+                        pinColour = XCP.settings.colourGroupLeader
+                    end
+                    COMPASS_PINS.pinManager:CreatePin( pintype, pinColour, x, z, GetUnitDisplayName(tag))
                 end
             end
         end
     end
 end
+
+
+function XCP.cardinalPointCallback()
+    if XCP.settings.showCardinalPoints then
+        x, z = GetMapPlayerPosition("player")
+        if x ~= lastPlayerX or z ~= lastPlayerZ then
+            COMPASS_PINS.pinManager:CreatePin("XCP.north", XCP.settings.colourCardinalPoint, x, z-0.1)
+            COMPASS_PINS.pinManager:CreatePin("XCP.south", XCP.settings.colourCardinalPoint, x, z+0.1)
+            COMPASS_PINS.pinManager:CreatePin("XCP.east", XCP.settings.colourCardinalPoint, x+0.1, z)
+            COMPASS_PINS.pinManager:CreatePin("XCP.west", XCP.settings.colourCardinalPoint, x-0.1, z)
+        end
+        lastPlayerX = X
+        lastPlayerZ = z
+    end
+end
+
 
 
 function XCP.servicePinCallback()
     for n=1, GetNumMapLocations() do
         if IsMapLocationVisible(n) then
             -- locName = GetMapLocation(n)
-            icon,x,y = GetMapLocationIcon(n)
+            icon,x,z = GetMapLocationIcon(n)
             if (icon and (icon ~= "")) then
                 pathnames = split(icon, "/")
                 filename = pathnames[table.getn(pathnames)]
                 pintype = ""
+                pinColour = {}
 
                 if XCP.settings.showStables and filename == "servicepin_stable.dds" then 
                     pintype = "XCP.stable"
+                    pinColour = XCP.settings.colourStable
                 elseif XCP.settings.showBanks and filename == "servicepin_bank.dds" then 
                     pintype = "XCP.bank"
+                    pinColour = XCP.settings.colourBank
                 elseif XCP.settings.showRefuges and (filename == "servicepin_thievesguild.dds" or filename == "servicepin_fence.dds") then 
                     pintype = "XCP.refuge"
+                    pinColour = XCP.settings.colourRefuge
                 end
 
                 if pintype ~= "" then
-                    df("Created town service icon: '%s'", filename)
-                    COMPASS_PINS.pinManager:CreatePin( pintype, {}, x, y, "service")
+                    -- pass colour as pin.pinTag
+                    COMPASS_PINS.pinManager:CreatePin( pintype, pinColour, x, z, "service")
                 end
             end
         end
-    end
-
-    -- cardinal compass directions
-    if XCP.settings.showCardinalPoints then
-        COMPASS_PINS.pinManager:CreatePin("XCP.north", {}, 0.5, 0)
-        COMPASS_PINS.pinManager:CreatePin("XCP.south", {}, 0.5, 1.0)
-        COMPASS_PINS.pinManager:CreatePin("XCP.east", {}, 1.0, 0.5)
-        COMPASS_PINS.pinManager:CreatePin("XCP.west", {}, 0, 0.5)
     end
 end
 
 
 function RefreshVolatilePins()
     if XCP.settings.showGroupMembers and GetGroupSize() > 0 then
+        COMPASS_PINS.pinManager:RemovePins("groupleader")
         COMPASS_PINS:RefreshPins("groupmember")
         -- this also refreshes leader as they share the same callback function
     end
+    COMPASS_PINS.pinManager:RemovePins("XCP.north")
+    COMPASS_PINS.pinManager:RemovePins("XCP.south")
+    COMPASS_PINS.pinManager:RemovePins("XCP.east")
+    COMPASS_PINS:RefreshPins("XCP.west")     -- recreates NSEW
 end
 
 
@@ -320,12 +457,6 @@ end
 
 -- ====================== Events ==============================
 
--- call a function every X milliseconds. String is a unique identifier.
--- we only need to do this if the pins denote things that are changing their position,
--- such as players or NPCs. Otherwise the pins will not refresh/move until the player
--- travels to a new map.
-EVENT_MANAGER:RegisterForUpdate("ExtraCompassPins_Refresh", XCP.settings.pinRefreshms or 500, RefreshVolatilePins)
--- disable with EVENT_MANAGER:UnregisterForUpdate("ExtraCompassPins_Refresh")
 
 function XCP.OnAddOnLoaded(event, addonName)
   -- The event fires each time *any* addon loads - but we only care about when our own addon loads.
