@@ -245,9 +245,9 @@ function XCP.SetupSettings()
                 }
                 COMPASS_PINS:RefreshPins("XCP.stable")
             end,
-            default = XCP.defaultSettings.colourGroupLeader.r,
-            XCP.defaultSettings.colourGroupLeader.g,
-            XCP.defaultSettings.colourGroupLeader.b
+            default = XCP.defaultSettings.colourStable.r,
+            XCP.defaultSettings.colourStable.g,
+            XCP.defaultSettings.colourStable.b
         },
         ---------------------------- bank ----------------------------------
         [7] = {
@@ -359,8 +359,8 @@ function XCP.SetupSettings()
         },
         [13] = {
             type = "slider",
-            name = "Group Pin Refresh Interval (ms)",
-            tooltip = "How often to refresh the group member pins, in milliseconds.",
+            name = "Pin Refresh Interval (ms)",
+            tooltip = "How often to refresh moving pins, in milliseconds.",
             min = 100,
             max = 5000,
             step = 100,
@@ -385,19 +385,24 @@ function XCP.groupPinCallback()
     -- pintype matches the string given to AddCustomPin
     -- pin.x and pin.y are normalised map coordinates (0,0 = top left, 1,1 = bottom right)
     -- pintag is a way to pass around extra info about the pins, if you need to
-    if XCP.settings.showGroupMembers and GetGroupSize() > 0 then
+    if (XCP.settings.showGroupMembers or XCP.settings.showGroupLeader) and GetGroupSize() > 0 then
         -- player is grouped
         for n = 1, GetGroupSize() do
             tag = GetGroupUnitTagByIndex(n)
-            if (not IsUnitPlayer(tag)) and IsUnitOnline(tag) and IsGroupMemberInSameWorldAsPlayer(tag) and
+            -- IsUnitPlayer(tag) returns true if the unit is not an NPC
+            if IsUnitOnline(tag) and not (tag == GetLocalPlayerGroupUnitTag()) and IsGroupMemberInSameWorldAsPlayer(tag) and
                 IsGroupMemberInSameInstanceAsPlayer(tag) and IsGroupMemberInSameLayerAsPlayer(tag) then
                 x, z, _, inCurrentMap = GetMapPlayerPosition(tag) -- to groupN where N=GROUP_SIZE_MAX
                 if inCurrentMap then
-                    pintype = "groupmember"
-                    pinColour = XCP.settings.colourGroupMember
-                    if IsUnitGroupLeader(tag) then
+                    leader = IsUnitGroupLeader(tag)
+                    if XCP.settings.showGroupLeader and leader then
                         pintype = "groupleader"
                         pinColour = XCP.settings.colourGroupLeader
+                    elseif XCP.settings.showGroupMembers and not leader then
+                        pintype = "groupmember"
+                        pinColour = XCP.settings.colourGroupMember
+                    else
+                        return
                     end
                     COMPASS_PINS.pinManager:CreatePin(pintype, {
                         id = tag,
@@ -450,48 +455,43 @@ function XCP.cardinalPointCallback()
     end
 end
 
-
 function XCP.servicePinCallback()
     for n = 1, GetNumMapLocations() do
         if IsMapLocationVisible(n) then
-            -- locName = GetMapLocation(n)
             icon, x, z = GetMapLocationIcon(n)
-            if (icon and (icon ~= "")) then
+            if icon then
                 pathnames = split(icon, "/")
                 filename = pathnames[table.getn(pathnames)]
-                pintype = ""
-                pinColour = {
-                    r = 1,
-                    g = 1,
-                    b = 1
-                }
-
-                if XCP.settings.showStables and filename == "servicepin_stable.dds" then
-                    pintype = "XCP.stable"
-                    pinColour = XCP.settings.colourStable
-                elseif XCP.settings.showBanks and filename == "servicepin_bank.dds" then
-                    pintype = "XCP.bank"
-                    pinColour = XCP.settings.colourBank
-                elseif XCP.settings.showRefuges and
-                    (filename == "servicepin_thievesguild.dds" or filename == "servicepin_fence.dds") then
-                    pintype = "XCP.refuge"
-                    pinColour = XCP.settings.colourRefuge
-                end
-
-                if pintype ~= "" then
-                    -- pass colour as pin.pinTag
-                    pinID = getNextPinID()
-                    COMPASS_PINS.pinManager:CreatePin(pintype, {
-                        id = pinID,
-                        r = pinColour.r,
-                        g = pinColour.g,
-                        b = pinColour.b
-                    }, x, z, "service")
-                end
+                CreateServicePin(x, z, filename)
             end
         end
     end
 end
+
+
+function CreateServicePin(x, z, filename)
+    if XCP.settings.showStables and filename == "servicepin_stable.dds" then
+        pintype = "XCP.stable"
+        pinColour = XCP.settings.colourStable
+    elseif XCP.settings.showBanks and filename == "servicepin_bank.dds" then
+        pintype = "XCP.bank"
+        pinColour = XCP.settings.colourBank
+    elseif XCP.settings.showRefuges and
+        (filename == "servicepin_thievesguild.dds" or filename == "servicepin_fence.dds") then
+        pintype = "XCP.refuge"
+        pinColour = XCP.settings.colourRefuge
+    else
+        return
+    end
+    COMPASS_PINS.pinManager:CreatePin(pintype, {
+        id = getNextPinID(),
+        r = pinColour.r,
+        g = pinColour.g,
+        b = pinColour.b
+    }, x, z, "service")
+end
+
+
 
 function RefreshVolatilePins()
     if XCP.settings.showGroupMembers and GetGroupSize() > 0 then
