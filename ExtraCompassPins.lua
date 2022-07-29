@@ -65,7 +65,7 @@ end
 function XCP.Initialize()
 
     XCP.settings = ZO_SavedVars:NewAccountWide("ExtraCompassPins_SV", 1, nil, XCP.defaultSettings)
-    XCP.SetupSettings()
+    XCP.SetupAddonMenu()
     -- call a function every X milliseconds. String is a unique identifier.
     -- we only need to do this if the pins denote things that are changing their position,
     -- such as players or NPCs. Otherwise the pins will not refresh/move until the player
@@ -81,6 +81,9 @@ function XCP.Initialize()
     AddColouredPin("groupleader", 1.0, "esoui/art/compass/groupleader.dds", XCP.groupPinCallback)
     AddColouredPin("XCP.cardinal", 1.0, "ExtraCompassPins/textures/north.dds", XCP.cardinalPointCallback)
 
+    if XCP.settings.showCardinalPoints then
+        HideBuiltinCardinalPoints(true)
+    end
     COMPASS_PINS:RefreshPins()
 end
 
@@ -124,7 +127,7 @@ function AddColouredPin(pintype, maxDist, texture, callback)
     })
 end
 
-function XCP.SetupSettings()
+function XCP.SetupAddonMenu()
     local LAM2 = LibAddonMenu2
     if not LAM2 then
         return
@@ -332,6 +335,7 @@ function XCP.SetupSettings()
             end,
             setFunc = function(value)
                 XCP.settings.showCardinalPoints = value
+                HideBuiltinCardinalPoints(XCP.settings.showCardinalPoints)
                 COMPASS_PINS:RefreshPins()
             end,
             default = XCP.defaultSettings.showCardinalPoints
@@ -378,6 +382,25 @@ function XCP.SetupSettings()
     }
     LAM2:RegisterOptionControls(XCP.name, optionsTable)
 end
+
+
+function HideBuiltinCardinalPoints(hide)
+    local fontToUse 
+    if hide then
+        fontToUse = "zzzzzz"    -- nonsense font name
+    else
+        fontToUse = IsInGamepadPreferredMode() and "ZoFontGamepadBold34" or "ZoFontHeader4"
+    end
+    ZO_CompassContainer:SetCardinalDirection(GetString(SI_COMPASS_NORTH_ABBREVIATION), fontToUse,
+        CARDINAL_DIRECTION_NORTH)
+    ZO_CompassContainer:SetCardinalDirection(GetString(SI_COMPASS_SOUTH_ABBREVIATION), fontToUse,
+        CARDINAL_DIRECTION_SOUTH)
+    ZO_CompassContainer:SetCardinalDirection(GetString(SI_COMPASS_EAST_ABBREVIATION), fontToUse,
+        CARDINAL_DIRECTION_EAST)
+    ZO_CompassContainer:SetCardinalDirection(GetString(SI_COMPASS_WEST_ABBREVIATION), fontToUse,
+        CARDINAL_DIRECTION_WEST)
+end
+
 
 -- called whenever the compass is refreshed
 -- must recreate all pins
@@ -430,28 +453,28 @@ function XCP.cardinalPointCallback()
             r = pinColour.r,
             g = pinColour.g,
             b = pinColour.b
-        }, x, z - 0.02)
+        }, x, z - 0.1)
         COMPASS_PINS.pinManager:CreatePin("XCP.cardinal", {
             id = southID,
             texture = "ExtraCompassPins/textures/south.dds",
             r = pinColour.r,
             g = pinColour.g,
             b = pinColour.b
-        }, x, z + 0.02)
+        }, x, z + 0.1)
         COMPASS_PINS.pinManager:CreatePin("XCP.cardinal", {
             id = westID,
             texture = "ExtraCompassPins/textures/west.dds",
             r = pinColour.r,
             g = pinColour.g,
             b = pinColour.b
-        }, x - 0.02, z)
+        }, x - 0.1, z)
         COMPASS_PINS.pinManager:CreatePin("XCP.cardinal", {
             id = eastID,
             texture = "ExtraCompassPins/textures/east.dds",
             r = pinColour.r,
             g = pinColour.g,
             b = pinColour.b
-        }, x + 0.02, z)
+        }, x + 0.1, z)
     end
 end
 
@@ -467,7 +490,6 @@ function XCP.servicePinCallback()
         end
     end
 end
-
 
 function CreateServicePin(x, z, filename)
     if XCP.settings.showStables and filename == "servicepin_stable.dds" then
@@ -490,8 +512,6 @@ function CreateServicePin(x, z, filename)
         b = pinColour.b
     }, x, z, "service")
 end
-
-
 
 function RefreshVolatilePins()
     if XCP.settings.showGroupMembers and GetGroupSize() > 0 then
